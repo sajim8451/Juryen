@@ -28,7 +28,7 @@ jobs:
       - name: Extract Juryen project
         run: |
           mkdir -p juryen
-          unzip -q "Juryen-Android-Project-Female-Voice.zip" -d juryen
+          unzip -q "Juryen-Android-Project.zip" -d juryen
 
       - name: Build debug APK
         uses: gradle/gradle-build-action@v3
