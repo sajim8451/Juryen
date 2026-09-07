@@ -8,36 +8,87 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download project
+
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 34
+      - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-34"
+          sdkmanager "build-tools;34.0.0"
 
       - name: Extract Juryen project
         run: |
+          rm -rf juryen
           mkdir -p juryen
+
           unzip -q "Juryen-Android-Project.zip" -d juryen
 
-      - name: Build debug APK
-        uses: gradle/gradle-build-action@v3
+          echo "===== Extracted files ====="
+          find juryen -maxdepth 4 -type f | head -100
+
+      - name: Find Android project
+        id: find_project
+        run: |
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/juryen" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -exec dirname {} \; | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "❌ Android Gradle project not found!"
+            echo "Searching for build.gradle files..."
+            find "$GITHUB_WORKSPACE/juryen" -type f -name "build.gradle*" -print
+            exit 1
+          fi
+
+          echo "✅ Android project found:"
+          echo "$PROJECT_DIR"
+
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          build-root-directory: juryen
-          arguments: assembleDebug
+          gradle-version: '8.10.2'
+
+      - name: Build debug APK
+        working-directory: ${{ steps.find_project.outputs.project_dir }}
+        run: |
+          echo "===== Project directory ====="
+          pwd
+
+          echo "===== Project files ====="
+          ls -la
+
+          echo "===== Building APK ====="
+          gradle assembleDebug --stacktrace
+
+      - name: Find APK
+        id: find_apk
+        run: |
+          APK=$(find "$GITHUB_WORKSPACE/juryen" -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "❌ APK was not generated!"
+            exit 1
+          fi
+
+          echo "✅ APK found:"
+          echo "$APK"
+
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Juryen-debug-APK
-          path: juryen/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ steps.find_apk.outputs.apk }}
